@@ -11,6 +11,8 @@ from sklearn.model_selection import train_test_split
 from sklearn.preprocessing import StandardScaler
 import torch
 from torch import nn, optim
+from torch.utils.data import TensorDataset, DataLoader
+import matplotlib.pyplot as plt
 
 # Load environment variables from .env file
 load_dotenv()
@@ -65,13 +67,18 @@ scaler = StandardScaler()
 X_scaled = scaler.fit_transform(X)
 
 # Split data into training and testing sets
-X_train, X_test, y_train, y_test = train_test_split(X_scaled, y, test_size=0.2, random_state=42)
+X_train_np, X_test_np, y_train_np, y_test_np = train_test_split(X_scaled, y.values, test_size=0.2, random_state=42)
 
 # Convert data to PyTorch tensors
-X_train_torch = torch.tensor(X_train, dtype=torch.float32)
-y_train_torch = torch.tensor(y_train.values, dtype=torch.float32).view(-1, 1)
-X_test_torch = torch.tensor(X_test, dtype=torch.float32)
-y_test_torch = torch.tensor(y_test.values, dtype=torch.float32).view(-1, 1)
+X_train_torch = torch.tensor(X_train_np, dtype=torch.float32)
+y_train_torch = torch.tensor(y_train_np, dtype=torch.float32).view(-1, 1)
+X_test_torch = torch.tensor(X_test_np, dtype=torch.float32)
+y_test_torch = torch.tensor(y_test_np, dtype=torch.float32).view(-1, 1)
+
+# Create DataLoader for batch processing
+batch_size = 16
+train_dataset = TensorDataset(X_train_torch, y_train_torch)
+train_loader = DataLoader(train_dataset, batch_size=batch_size, shuffle=True)
 
 # Define the number of qubits and create parameter vectors
 num_qubits = 3
@@ -251,33 +258,53 @@ class QuantumLayer(nn.Module):
 class HybridNN(nn.Module):
     def __init__(self):
         super(HybridNN, self).__init__()
-        self.fc1 = nn.Linear(len(features), num_qubits)
+        # Increase the number of neurons in fc1 for better learning capacity
+        self.fc1 = nn.Linear(len(features), 16)
+        self.fc2 = nn.Linear(16, num_qubits)
         self.quantum_layer = QuantumLayer()  # Use custom quantum layer
-        self.fc2 = nn.Linear(1, 1)  # Output is now continuous for regression (1 output)
+        self.fc3 = nn.Linear(1, 1)  # Output is now continuous for regression (1 output)
 
     def forward(self, x):
-        x = torch.tanh(self.fc1(x))
+        x = torch.relu(self.fc1(x))
+        x = torch.tanh(self.fc2(x))  # Output matches the number of qubits
         x = self.quantum_layer(x)
-        x = self.fc2(x)
+        x = self.fc3(x)
         return x
 
 # Initialize the model, loss function, and optimizer
 model = HybridNN()
 criterion = nn.MSELoss()  # Use MSE loss for regression
-optimizer = optim.Adam(model.parameters(), lr=0.01)
+optimizer = optim.Adam(model.parameters(), lr=0.001)  # Reduced learning rate
+
+# Lists to store loss values for plotting
+train_losses = []
 
 # Train the hybrid quantum-classical model
-epochs = 20
+epochs = 50  # Increased epochs
 for epoch in range(epochs):
     model.train()
-    optimizer.zero_grad()
-    output = model(X_train_torch)
-    loss = criterion(output, y_train_torch)
-    loss.backward()
-    optimizer.step()
+    epoch_loss = 0
+    for X_batch, y_batch in train_loader:
+        optimizer.zero_grad()
+        output = model(X_batch)
+        loss = criterion(output, y_batch)
+        loss.backward()
+        optimizer.step()
+        epoch_loss += loss.item() * X_batch.size(0)
+    avg_epoch_loss = epoch_loss / len(train_loader.dataset)
+    train_losses.append(avg_epoch_loss)
 
-    if epoch % 5 == 0:
-        print(f"Epoch {epoch+1}/{epochs}, Loss: {loss.item():.4f}")
+    if (epoch + 1) % 5 == 0:
+        print(f"Epoch {epoch+1}/{epochs}, Loss: {avg_epoch_loss:.4f}")
+
+# Plot training loss over epochs
+plt.figure()
+plt.plot(range(1, epochs + 1), train_losses, label='Training Loss')
+plt.xlabel('Epoch')
+plt.ylabel('MSE Loss')
+plt.title('Training Loss over Epochs')
+plt.legend()
+plt.show()
 
 # Evaluate the QNN model
 model.eval()
@@ -286,12 +313,24 @@ with torch.no_grad():
     mse_loss = criterion(predictions, y_test_torch)
     print(f"Test MSE Loss: {mse_loss.item():.4f}")
 
-# Optional: Compute additional evaluation metrics
-from sklearn.metrics import mean_absolute_error, r2_score
+    # Optional: Compute additional evaluation metrics
+    from sklearn.metrics import mean_absolute_error, r2_score, mean_squared_error
 
-y_pred = predictions.numpy().flatten()
-y_true = y_test_torch.numpy().flatten()
-mae = mean_absolute_error(y_true, y_pred)
-r2 = r2_score(y_true, y_pred)
-print(f"Test MAE: {mae:.4f}")
-print(f"Test R^2 Score: {r2:.4f}")
+    y_pred = predictions.numpy().flatten()
+    y_true = y_test_torch.numpy().flatten()
+    mae = mean_absolute_error(y_true, y_pred)
+    rmse = np.sqrt(mean_squared_error(y_true, y_pred))
+    r2 = r2_score(y_true, y_pred)
+    print(f"Test MAE: {mae:.4f}")
+    print(f"Test RMSE: {rmse:.4f}")
+    print(f"Test R^2 Score: {r2:.4f}")
+
+# Plot predicted vs. actual values
+plt.figure()
+plt.scatter(y_true, y_pred, alpha=0.7)
+plt.plot([y_true.min(), y_true.max()], [y_true.min(), y_true.max()], 'r--', label='Ideal Fit')
+plt.xlabel('Actual Accident Probability')
+plt.ylabel('Predicted Accident Probability')
+plt.title('Predicted vs. Actual Accident Probability')
+plt.legend()
+plt.show()
