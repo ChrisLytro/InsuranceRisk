@@ -22,7 +22,7 @@ RESULTS_SAVE_PATH = 'results.txt'  # File to save results if requested
 BATCH_SIZE = 16
 NUM_EPOCHS = 50
 LEARNING_RATE = 0.001
-NUM_QUBITS = 3
+NUM_QUBITS = 4  # Increased number of qubits for more complexity
 TARGET_COLUMN = 'Accident Probability'
 FEATURE_COLUMNS = ['Driver Age', 'Number of Accidents', 'Number of Traffic Violations', 'Vehicle Safety Rating']
 
@@ -101,9 +101,11 @@ def create_quantum_circuit(data_params, theta_params, num_qubits):
     qc.barrier()
     for i in range(num_qubits):
         qc.ry(theta_params[i], i)
-    # Entanglement
+    # Add more entanglement layers
     qc.cz(0, 1)
     qc.cz(1, 2)
+    qc.cz(2, 3)
+    qc.cz(0, 3)
     qc.barrier()
     return qc
 
@@ -267,13 +269,16 @@ class HybridNN(nn.Module):
     """Hybrid quantum-classical neural network."""
     def __init__(self, input_size, num_qubits):
         super(HybridNN, self).__init__()
-        self.fc1 = nn.Linear(input_size, 16)
-        self.fc2 = nn.Linear(16, num_qubits)
+        # Increased model complexity with more layers and dropout
+        self.fc1 = nn.Linear(input_size, 32)
+        self.fc2 = nn.Linear(32, num_qubits)
+        self.dropout = nn.Dropout(0.3)  # Dropout layer to prevent overfitting
         self.quantum_layer = QuantumLayer(num_qubits)
         self.fc3 = nn.Linear(1, 1)
 
     def forward(self, x):
         x = torch.relu(self.fc1(x))
+        x = self.dropout(x)  # Apply dropout
         x = torch.tanh(self.fc2(x))
         x = self.quantum_layer(x)
         x = self.fc3(x)
