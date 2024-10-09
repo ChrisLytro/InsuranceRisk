@@ -18,6 +18,7 @@ from sklearn.metrics import mean_absolute_error, r2_score, mean_squared_error
 # Constants and Configuration
 DATA_FILE_PATH = "car_insurance_risk_data.xlsx"
 MODEL_SAVE_PATH = 'hybrid_qnn_model.pth'
+RESULTS_SAVE_PATH = 'results.txt'  # File to save results if requested
 BATCH_SIZE = 16
 NUM_EPOCHS = 50
 LEARNING_RATE = 0.001
@@ -340,6 +341,20 @@ def plot_predictions(y_true, y_pred):
     plt.legend()
     plt.show()
 
+def ask_to_save_results(train_losses, y_true, y_pred):
+    """Ask the user if they want to save the results and handle saving."""
+    save_choice = input("\nDo you want to save the results? (yes/no): ").strip().lower()
+    if save_choice == 'yes':
+        with open(RESULTS_SAVE_PATH, 'w') as f:
+            f.write("Training Losses:\n")
+            f.write(f"{train_losses}\n")
+            f.write("\nPredicted vs Actual Results:\n")
+            for true_val, pred_val in zip(y_true, y_pred):
+                f.write(f"Actual: {true_val}, Predicted: {pred_val}\n")
+        print(f"Results saved to {RESULTS_SAVE_PATH}.")
+    else:
+        print("Results were not saved.")
+
 def main():
     """Main function to run the script."""
     # Load environment variables
@@ -406,6 +421,9 @@ def main():
 
     # Plot predictions
     plot_predictions(y_true, y_pred)
+
+    # Ask the user whether to save the results
+    ask_to_save_results(train_losses, y_true, y_pred)
 
 if __name__ == "__main__":
     main()
