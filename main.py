@@ -215,10 +215,10 @@ def execute_quantum_circuit(data, parameters, quantum_circuit, backend, data_par
         return counts
 
     else:
-        # If using a real backend, use Qiskit Runtime for execution
-        with Session(service=service, backend=backend) as session:
-            sampler = Sampler(session=session)
-            result = sampler.run(circuits=[transpiled_qc]).result()
+        # If using a real backend, use Qiskit Runtime for execution without deprecated arguments
+        with Session(backend=backend) as session:
+            sampler = Sampler()
+            result = sampler.run([transpiled_qc]).result()  # Ensure circuit is wrapped in a list
             probabilities = result.quasi_dists[0].binary_probabilities()
             return probabilities
 
